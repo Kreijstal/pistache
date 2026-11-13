@@ -9,70 +9,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      - uses: actions/checkout@v6
       - uses: vmactions/netbsd-vm@v1
         with:
-          release: '10.1'
+          release: '10.2'
           usesh: true
           run: |
             set -eu
-            uname -a
-            cc --version
-            cc -print-file-name=libasan.so
-            mount
-            sysctl kern.securelevel
-            cat > sanitizer-smoke.c <<'EOF'
-            #include <stdlib.h>
-            #include <time.h>
-            #include <errno.h>
-            #include <string.h>
-            int main(int argc, char **argv) {
-              if (argc > 1 && strcmp(argv[1], "leak") == 0) {
-                char *p = malloc(37);
-                *(volatile char *)p = 1;
-              }
-              if (argc > 1 && strcmp(argv[1], "errno") == 0) errno = EINVAL;
-              time_t now = 0;
-              struct tm tm;
-              gmtime_r(&now, &tm);
-              localtime_r(&now, &tm);
-              return 0;
-            }
-            EOF
-            cc -g -O0 -fsanitize=address -fno-omit-frame-pointer sanitizer-smoke.c -o sanitizer-smoke
-            cc -g -O0 --coverage -pthread -fsanitize=address -fno-omit-frame-pointer sanitizer-smoke.c -o sanitizer-coverage
-            paxctl +a sanitizer-smoke
-            paxctl +a sanitizer-coverage
-            ldd sanitizer-smoke
+            pkg_add -u curl meson brotli pkgconf rapidjson libevent
+            export CC=gcc CXX=g++ LC_ALL=C
+            ldd /usr/pkg/lib/libcurl.so
+            pkg-config --modversion openssl
+            pkg-config --libs openssl
+            meson setup build -DPISTACHE_BUILD_TESTS=true -DPISTACHE_DEBUG=false -DPISTACHE_USE_SSL=true -DPISTACHE_USE_CONTENT_ENCODING_DEFLATE=true -DPISTACHE_USE_CONTENT_ENCODING_BROTLI=true -DPISTACHE_USE_CONTENT_ENCODING_ZSTD=true --buildtype=debug -Db_coverage=true -Db_sanitize=address -Db_lundef=false
+            ninja -C build tests/run_cookie_test tests/run_headers_test tests/run_http_server_test tests/run_mime_test tests/run_https_server_test tests/run_leak_socket
+            paxctl +a build/tests/run_cookie_test
+            ldd build/tests/run_https_server_test
+            nm -D build/tests/run_cookie_test | grep -E 'clone|fork' || test $? = 1
+            export LD_LIBRARY_PATH="$PWD/build/src"
             export ASAN_OPTIONS=detect_leaks=1:abort_on_error=1
-            export LSAN_OPTIONS=verbosity=2:log_threads=1
-            echo 'BASELINE CLEAN'
-            status=0
-            ./sanitizer-smoke > baseline-clean.log 2>&1 || status=$?
-            cat baseline-clean.log
-            echo "baseline clean status=$status"
-            echo 'BASELINE COVERAGE CLEAN'
-            status=0
-            ./sanitizer-coverage > baseline-coverage.log 2>&1 || status=$?
-            cat baseline-coverage.log
-            echo "baseline coverage status=$status"
-            echo 'BASELINE LEAK'
-            status=0
-            ./sanitizer-smoke leak > baseline-leak.log 2>&1 || status=$?
-            cat baseline-leak.log
-            echo "baseline leak status=$status"
-            echo 'ERRNO CLEAN'
-            status=0
-            ./sanitizer-smoke errno > errno-clean.log 2>&1 || status=$?
-            cat errno-clean.log
-            echo "errno clean status=$status"
-            echo 'ERRNO COVERAGE CLEAN'
-            status=0
-            ./sanitizer-coverage errno > errno-coverage.log 2>&1 || status=$?
-            cat errno-coverage.log
-            echo "errno coverage status=$status"
-            echo 'KERNEL CLONE TRACE'
-            status=0
-            ktrace -i -t c -f clone.ktrace ./sanitizer-smoke errno > traced.log 2>&1 || status=$?
-            cat traced.log
-            echo "traced status=$status"
-            kdump -f clone.ktrace | grep -E 'clone|EINVAL|Err#22' 
+            find build/tests -type f -name 'run_*' -exec paxctl +a {} +
+            meson test -C build --no-rebuild --verbose cookie_test headers_test http_server_test mime_test https_server_test
