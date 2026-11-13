@@ -12,13 +12,14 @@ jobs:
       - uses: actions/checkout@v6
       - uses: vmactions/netbsd-vm@v1
         with:
+          release: '10.1'
           usesh: true
           run: |
             set -eu
             pkg_add -u curl meson brotli pkgconf rapidjson libevent
             export CC=gcc CXX=g++
             meson setup build -DPISTACHE_BUILD_TESTS=true -DPISTACHE_DEBUG=false -DPISTACHE_USE_SSL=true -DPISTACHE_USE_CONTENT_ENCODING_DEFLATE=true -DPISTACHE_USE_CONTENT_ENCODING_BROTLI=true -DPISTACHE_USE_CONTENT_ENCODING_ZSTD=true --buildtype=debug -Db_coverage=true -Db_sanitize=address -Db_lundef=false
-            ninja -C build tests/run_cookie_test
+            ninja -C build
             paxctl +a build/tests/run_cookie_test
             ldd build/tests/run_cookie_test
             nm -D build/tests/run_cookie_test | grep -E 'clone|fork' || test $? = 1
@@ -30,3 +31,6 @@ jobs:
             cat traced.log
             echo "traced status=$status"
             kdump -f clone.ktrace | grep -E 'clone|EINVAL|Err#22'
+            test "$status" -eq 0
+            find build/tests -type f -name 'run_*' -exec paxctl +a {} +
+            meson test -C build --verbose --no-suite network
