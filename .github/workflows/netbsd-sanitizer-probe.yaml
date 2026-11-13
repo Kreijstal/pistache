@@ -49,7 +49,7 @@ jobs:
             paxctl +a build/tests/run_cookie_test
             ldd build/tests/run_https_server_test
             nm -D build/tests/run_cookie_test | grep -E 'clone|fork' || test $? = 1
-            export LD_LIBRARY_PATH="$PWD/build/src"
+            export LD_LIBRARY_PATH="$PWD/build/src:$LD_LIBRARY_PATH"
             export ASAN_OPTIONS=detect_leaks=1:abort_on_error=1
             find build/tests -type f -name 'run_*' -exec paxctl +a {} +
             meson test -C build --no-rebuild --verbose --no-suite network
