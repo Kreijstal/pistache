@@ -1,0 +1,61 @@
+# SPDX-FileCopyrightText: 2026 Pistache Contributors
+# SPDX-License-Identifier: Apache-2.0
+name: NetBSD sanitizer probe
+on:
+  push:
+    branches: [ci/netbsd-sanitizer-probe]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: vmactions/netbsd-vm@v1
+        with:
+          usesh: true
+          run: |
+            set -eu
+            uname -a
+            cc --version
+            mount
+            sysctl kern.securelevel
+            cat > sanitizer-smoke.c <<'EOF'
+            #include <stdlib.h>
+            int main(int argc, char **argv) {
+              if (argc > 1) {
+                char *p = malloc(37);
+                *(volatile char *)p = 1;
+              }
+              return 0;
+            }
+            EOF
+            cc -g -O0 -fsanitize=address -fno-omit-frame-pointer sanitizer-smoke.c -o sanitizer-smoke
+            paxctl +a sanitizer-smoke
+            export ASAN_OPTIONS=detect_leaks=1:abort_on_error=1
+            export LSAN_OPTIONS=verbosity=2:log_threads=1
+            echo 'BASELINE CLEAN'
+            status=0
+            ./sanitizer-smoke > baseline-clean.log 2>&1 || status=$?
+            cat baseline-clean.log
+            echo "baseline clean status=$status"
+            echo 'BASELINE LEAK'
+            status=0
+            ./sanitizer-smoke leak > baseline-leak.log 2>&1 || status=$?
+            cat baseline-leak.log
+            echo "baseline leak status=$status"
+            echo 'PROCFS CONFIGURATION'
+            if mount | grep -q ' on /proc '; then
+              mount -u -o linux /proc
+            else
+              mkdir -p /proc
+              mount -t procfs -o linux procfs /proc
+            fi
+            mount
+            echo 'PROCFS CLEAN'
+            ./sanitizer-smoke > procfs-clean.log 2>&1
+            cat procfs-clean.log
+            echo 'PROCFS LEAK'
+            status=0
+            ./sanitizer-smoke leak > procfs-leak.log 2>&1 || status=$?
+            cat procfs-leak.log
+            test "$status" -ne 0
+            grep 'ERROR: LeakSanitizer: detected memory leaks' procfs-leak.log
