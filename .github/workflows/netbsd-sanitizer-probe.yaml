@@ -21,11 +21,14 @@ jobs:
             sysctl kern.securelevel
             cat > sanitizer-smoke.c <<'EOF'
             #include <stdlib.h>
+            #include <errno.h>
+            #include <string.h>
             int main(int argc, char **argv) {
-              if (argc > 1) {
+              if (argc > 1 && strcmp(argv[1], "leak") == 0) {
                 char *p = malloc(37);
                 *(volatile char *)p = 1;
               }
+              if (argc > 1 && strcmp(argv[1], "errno") == 0) errno = EINVAL;
               return 0;
             }
             EOF
@@ -51,23 +54,19 @@ jobs:
             ./sanitizer-smoke leak > baseline-leak.log 2>&1 || status=$?
             cat baseline-leak.log
             echo "baseline leak status=$status"
-            echo 'PROCFS CONFIGURATION'
-            if mount | grep -q ' on /proc '; then
-              mount -u -o linux /proc
-            else
-              mkdir -p /proc
-              mount -t procfs -o linux procfs /proc
-            fi
-            mount
-            echo 'PROCFS CLEAN'
-            ./sanitizer-smoke > procfs-clean.log 2>&1
-            cat procfs-clean.log
-            echo 'PROCFS COVERAGE CLEAN'
-            ./sanitizer-coverage > procfs-coverage.log 2>&1
-            cat procfs-coverage.log
-            echo 'PROCFS LEAK'
+            echo 'ERRNO CLEAN'
             status=0
-            ./sanitizer-smoke leak > procfs-leak.log 2>&1 || status=$?
-            cat procfs-leak.log
-            test "$status" -ne 0
-            grep 'ERROR: LeakSanitizer: detected memory leaks' procfs-leak.log
+            ./sanitizer-smoke errno > errno-clean.log 2>&1 || status=$?
+            cat errno-clean.log
+            echo "errno clean status=$status"
+            echo 'ERRNO COVERAGE CLEAN'
+            status=0
+            ./sanitizer-coverage errno > errno-coverage.log 2>&1 || status=$?
+            cat errno-coverage.log
+            echo "errno coverage status=$status"
+            echo 'KERNEL CLONE TRACE'
+            status=0
+            ktrace -i -t c -f clone.ktrace ./sanitizer-smoke errno > traced.log 2>&1 || status=$?
+            cat traced.log
+            echo "traced status=$status"
+            kdump -f clone.ktrace | grep -E 'clone|EINVAL|Err#22' 
