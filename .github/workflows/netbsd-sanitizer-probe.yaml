@@ -16,11 +16,10 @@ jobs:
           usesh: true
           run: |
             set -eu
-            pkg_add -u curl meson brotli pkgconf rapidjson libevent gcc15
-            export PATH=/usr/pkg/gcc15/bin:$PATH
-            export CC=gcc CXX=g++ LC_ALL=C
-            gcc --version
-            g++ --version
+            pkg_add -u curl meson brotli pkgconf rapidjson libevent clang compiler-rt
+            export CC=clang CXX=clang++ CXX_LD=ld LC_ALL=C
+            clang --version
+            clang++ --version
             ldd /usr/pkg/lib/libcurl.so
             pkg-config --modversion openssl
             pkg-config --libs openssl
