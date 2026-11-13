@@ -16,8 +16,8 @@ jobs:
           usesh: true
           run: |
             set -eu
-            pkg_add -u curl meson brotli pkgconf rapidjson libevent clang compiler-rt
-            export CC=clang CXX=clang++ CXX_LD=ld LC_ALL=C
+            pkg_add -u curl meson brotli pkgconf rapidjson libevent clang compiler-rt libcxx
+            export CC=clang CXX="clang++ -stdlib=libc++" CXX_LD=ld LC_ALL=C
             clang --version
             clang++ --version
             ldd /usr/pkg/lib/libcurl.so
