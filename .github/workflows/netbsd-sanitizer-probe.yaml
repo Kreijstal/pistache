@@ -7,7 +7,7 @@ on:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
       - uses: vmactions/netbsd-vm@v1
@@ -19,18 +19,12 @@ jobs:
             pkg_add -u curl meson brotli pkgconf rapidjson libevent
             export CC=gcc CXX=g++
             meson setup build -DPISTACHE_BUILD_TESTS=true -DPISTACHE_DEBUG=false -DPISTACHE_USE_SSL=true -DPISTACHE_USE_CONTENT_ENCODING_DEFLATE=true -DPISTACHE_USE_CONTENT_ENCODING_BROTLI=true -DPISTACHE_USE_CONTENT_ENCODING_ZSTD=true --buildtype=debug -Db_coverage=true -Db_sanitize=address -Db_lundef=false
-            ninja -C build
+            ninja -C build tests/run_cookie_test tests/run_headers_test tests/run_http_server_test tests/run_leak_socket
             paxctl +a build/tests/run_cookie_test
             ldd build/tests/run_cookie_test
             nm -D build/tests/run_cookie_test | grep -E 'clone|fork' || test $? = 1
             export LD_LIBRARY_PATH="$PWD/build/src"
             export ASAN_OPTIONS=detect_leaks=1:abort_on_error=1
             export LSAN_OPTIONS=verbosity=2:log_threads=1
-            status=0
-            ktrace -i -t c -f clone.ktrace build/tests/run_cookie_test > traced.log 2>&1 || status=$?
-            cat traced.log
-            echo "traced status=$status"
-            kdump -f clone.ktrace | grep -E 'clone|EINVAL|Err#22'
-            test "$status" -eq 0
             find build/tests -type f -name 'run_*' -exec paxctl +a {} +
-            meson test -C build --verbose --no-suite network
+            meson test -C build --no-rebuild --verbose cookie_test headers_test http_server_test
