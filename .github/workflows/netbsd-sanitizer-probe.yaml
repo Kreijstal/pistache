@@ -16,13 +16,34 @@ jobs:
           usesh: true
           run: |
             set -eu
-            pkg_add -u curl meson brotli pkgconf rapidjson libevent clang compiler-rt libcxx
-            export CC=clang CXX="clang++ -stdlib=libc++" CXX_LD=ld LC_ALL=C
+            pkg_add -u curl meson brotli pkgconf rapidjson libevent clang compiler-rt
+            export CC=clang CXX="clang++ -shared-libasan" CXX_LD=ld LC_ALL=C
+            export LD_LIBRARY_PATH="$(clang -print-runtime-dir)"
             clang --version
             clang++ --version
             ldd /usr/pkg/lib/libcurl.so
             pkg-config --modversion openssl
             pkg-config --libs openssl
+            cat > sanitizer-cxx.cc <<'EOF'
+            #include <sstream>
+            #include <string>
+            #include <openssl/pem.h>
+            int main() {
+              std::stringstream out;
+              out << std::string(1000, 'x');
+              if (out.str().size() != 1000) return 1;
+              BIO *bio = BIO_new_file("tests/certs/server_protected.key", "r");
+              if (!bio) return 2;
+              EVP_PKEY *key = PEM_read_bio_PrivateKey(bio, nullptr, nullptr, (void*)"test");
+              BIO_free(bio);
+              if (!key) return 3;
+              EVP_PKEY_free(key);
+              return 0;
+            }
+            EOF
+            clang++ -g -O0 -fsanitize=address -shared-libasan sanitizer-cxx.cc -lcrypto -o sanitizer-cxx
+            paxctl +a sanitizer-cxx
+            ./sanitizer-cxx
             meson setup build -DPISTACHE_BUILD_TESTS=true -DPISTACHE_DEBUG=false -DPISTACHE_USE_SSL=true -DPISTACHE_USE_CONTENT_ENCODING_DEFLATE=true -DPISTACHE_USE_CONTENT_ENCODING_BROTLI=true -DPISTACHE_USE_CONTENT_ENCODING_ZSTD=true --buildtype=debug -Db_coverage=true -Db_sanitize=address -Db_lundef=false
             ninja -C build
             paxctl +a build/tests/run_cookie_test
