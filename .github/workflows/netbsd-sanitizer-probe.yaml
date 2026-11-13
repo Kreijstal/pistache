@@ -44,7 +44,7 @@ jobs:
             clang++ -g -O0 -fsanitize=address -shared-libasan sanitizer-cxx.cc -lcrypto -o sanitizer-cxx
             paxctl +a sanitizer-cxx
             ./sanitizer-cxx
-            meson setup build -DPISTACHE_BUILD_TESTS=true -DPISTACHE_DEBUG=false -DPISTACHE_USE_SSL=true -DPISTACHE_USE_CONTENT_ENCODING_DEFLATE=true -DPISTACHE_USE_CONTENT_ENCODING_BROTLI=true -DPISTACHE_USE_CONTENT_ENCODING_ZSTD=true --buildtype=debug -Db_coverage=true -Db_sanitize=address -Db_lundef=false
+            meson setup build -DPISTACHE_BUILD_TESTS=true -DPISTACHE_DEBUG=false -DPISTACHE_USE_SSL=true -DPISTACHE_USE_CONTENT_ENCODING_DEFLATE=true -DPISTACHE_USE_CONTENT_ENCODING_BROTLI=true -DPISTACHE_USE_CONTENT_ENCODING_ZSTD=true --buildtype=debug -Db_coverage=false -Db_sanitize=address -Db_lundef=false
             ninja -C build
             paxctl +a build/tests/run_cookie_test
             ldd build/tests/run_https_server_test
