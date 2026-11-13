@@ -16,6 +16,7 @@ jobs:
             set -eu
             uname -a
             cc --version
+            cc -print-file-name=libasan.so
             mount
             sysctl kern.securelevel
             cat > sanitizer-smoke.c <<'EOF'
@@ -29,7 +30,10 @@ jobs:
             }
             EOF
             cc -g -O0 -fsanitize=address -fno-omit-frame-pointer sanitizer-smoke.c -o sanitizer-smoke
+            cc -g -O0 --coverage -pthread -fsanitize=address -fno-omit-frame-pointer sanitizer-smoke.c -o sanitizer-coverage
             paxctl +a sanitizer-smoke
+            paxctl +a sanitizer-coverage
+            ldd sanitizer-smoke
             export ASAN_OPTIONS=detect_leaks=1:abort_on_error=1
             export LSAN_OPTIONS=verbosity=2:log_threads=1
             echo 'BASELINE CLEAN'
@@ -37,6 +41,11 @@ jobs:
             ./sanitizer-smoke > baseline-clean.log 2>&1 || status=$?
             cat baseline-clean.log
             echo "baseline clean status=$status"
+            echo 'BASELINE COVERAGE CLEAN'
+            status=0
+            ./sanitizer-coverage > baseline-coverage.log 2>&1 || status=$?
+            cat baseline-coverage.log
+            echo "baseline coverage status=$status"
             echo 'BASELINE LEAK'
             status=0
             ./sanitizer-smoke leak > baseline-leak.log 2>&1 || status=$?
@@ -53,6 +62,9 @@ jobs:
             echo 'PROCFS CLEAN'
             ./sanitizer-smoke > procfs-clean.log 2>&1
             cat procfs-clean.log
+            echo 'PROCFS COVERAGE CLEAN'
+            ./sanitizer-coverage > procfs-coverage.log 2>&1
+            cat procfs-coverage.log
             echo 'PROCFS LEAK'
             status=0
             ./sanitizer-smoke leak > procfs-leak.log 2>&1 || status=$?
